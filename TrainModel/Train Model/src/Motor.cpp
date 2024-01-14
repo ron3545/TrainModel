@@ -1,8 +1,8 @@
 #include "Motor.hpp"
 #include <Arduino.h>
 
-Motor::Motor(int In1pin, int In2pin, int PWMpin, int STBYpin, int maxSpeed = 40)
-    : In1(In1pin), In2(In2pin), PWM(PWMpin), Standby(STBYpin), max_speed(maxSpeed)
+Motor::Motor(int In1pin, int In2pin, int PWMpin, int STBYpin, int maxSpeed, bool GradualMode)
+    : In1(In1pin), In2(In2pin), PWM(PWMpin), Standby(STBYpin), max_speed(maxSpeed), Isgradual(GradualMode)
 {
     pinMode(In1, OUTPUT);
     pinMode(In2, OUTPUT);
@@ -10,45 +10,33 @@ Motor::Motor(int In1pin, int In2pin, int PWMpin, int STBYpin, int maxSpeed = 40)
     pinMode(Standby, OUTPUT);
 }    
 
-void Motor::drive(int* speed, DriveMode_ mode = DriveMode_::DriveMode_GradualSpeedIncrease)
+void Motor::drive(int* speed)
 {
     digitalWrite(Standby, HIGH);
     Forward();
-
-    switch(mode)
-    {
-    case DriveMode_::DriveMode_GradualSpeedIncrease:
-    {
-        if(speed == nullptr)
-        return;
-        
-        if(*speed == max_speed)
-        analogWrite(PWM, map(*speed, 0, max_speed, 0, 255));
-        else{
-        while(*speed != max_speed)
-        {
-            analogWrite(PWM, map(*speed, 0, max_speed, 0, 255));
-            *speed += increment_decrement;
-        }
-        }
-    }break;
+    analogWrite(PWM, 120);
+    // if(Isgradual)
+    // {
+    //     if(*speed == max_speed)
+    //     analogWrite(PWM, map(*speed, 0, max_speed, 0, 120));
+    //     else{
+    //         while(*speed != max_speed)
+    //         {
+    //             analogWrite(PWM, map(*speed, 0, max_speed, 0, 120));
+    //             *speed += increment_decrement;
+    //         }
+    //     }
+    // }
+    // else
+    //     analogWrite(PWM, 120);
     
-    case DriveMode_::DriveMode_InstantSpeedIncrease:
-    {
-        analogWrite(PWM, 255);
-    }break;
-
-    default:
-    analogWrite(PWM, 0);
-    };
 }
 
-void Motor::brake(int* speed, BreakMode_ mode = BreakMode_::BreakMode_GradualBreak)
+void Motor::brake(int* speed)
 {
     Forward();
-    switch(mode)
-    {
-    case BreakMode_::BreakMode_GradualBreak:
+    
+    if(Isgradual)
     {
         if(speed == nullptr)
         return;
@@ -61,11 +49,9 @@ void Motor::brake(int* speed, BreakMode_ mode = BreakMode_::BreakMode_GradualBre
         analogWrite(PWM, map(*speed, 0, max_speed, 0, 255));
         *speed -= increment_decrement;
         }
-    }break;
-    
-    case BreakMode_::BreakMode_InstantBreak:
-    analogWrite(PWM, 0);
-    };
+    }
+    else
+        analogWrite(PWM, 0);
 }
 
 void Motor::standby()
