@@ -1,77 +1,86 @@
+/*
+ * Typical pin layout used:
+ * -----------------------------------------------------------------------------------------
+ *             MFRC522      Arduino       Arduino   Arduino    Arduino          Arduino
+ *             Reader/PCD   Uno/101       Mega      Nano v3    Leonardo/Micro   Pro Micro
+ * Signal      Pin          Pin           Pin       Pin        Pin              Pin
+ * -----------------------------------------------------------------------------------------
+ * RST/Reset   RST          9             5         D9         RESET/ICSP-5     RST
+ * SPI SS      SDA(SS)      10            53        D10        10               10
+ * SPI MOSI    MOSI         11 / ICSP-4   51        D11        ICSP-4           16
+ * SPI MISO    MISO         12 / ICSP-1   50        D12        ICSP-1           14
+ * SPI SCK     SCK          13 / ICSP-3   52        D13        ICSP-3           15
+ *
+ */
+
 #include <Arduino.h>
-#include <LiquidCrystal.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Servo.h>
 
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define RST_PIN         9          // Configurable, see typical pin layout above
+#define SS_PIN          10         // Configurable, see typical pin layout above
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
+
 float BeepCurrentAmount = 120; // Peso
 const float Total_Fair = 18;
 
-const uint8_t ss_pin = 10;
-const uint8_t rst_pin = 9;
-const uint8_t BeepCardLoader_Button = 13;
-const uint8_t rst = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
-
-unsigned long BeepCardPrevTime = millis();
-long CardTimeInterval = 1000;
-
-unsigned long CardLoaderPrevTime = millis();
-long LoaderTimeInterval = 2000;
-
-LiquidCrystal lcd(rst, en, d4, d5, d6, d7);
-MFRC522 mfrc522(ss_pin, rst_pin);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 Servo door;
 
 void setup() {
   // put your setup code here, to run once:
-  lcd.begin(16, 2);
-  SPI.begin();
-  mfrc522.PCD_Init();
+  lcd.init();
+  lcd.backlight();
 
-  door.attach(8);
+  door.attach(6);
   door.write(10); //closed
 
-  pinMode(BeepCardLoader_Button, INPUT);
+  SPI.begin();      // Initiate  SPI bus
+  mfrc522.PCD_Init();   // Initiate MFRC522
+
+  lcd.setCursor(0, 0);
+  lcd.print("Swipe Card");
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  unsigned long current_time = millis();
+    
 
-  if(current_time - BeepCardPrevTime > CardTimeInterval)
-  {
-    BeepCardPrevTime = current_time;
-    if(!mfrc522.PICC_IsNewCardPresent() || mfrc522.PICC_ReadCardSerial())
+    if ( ! mfrc522.PICC_IsNewCardPresent()) 
       return;
-
-    String tagID = "";
+    
+    // Select one of the cards
+    if ( ! mfrc522.PICC_ReadCardSerial()) 
+      return;
+    
+    //Show UID on serial monitor
+    String content= "";
     byte letter;
-    for(byte i = 0; i < mfrc522.uid.size; i++)
+    for (byte i = 0; i < mfrc522.uid.size; i++) 
     {
-      tagID.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-      tagID.concat(String(mfrc522.uid.uidByte[i], HEX));
+      content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
+      content.concat(String(mfrc522.uid.uidByte[i], HEX));
     }
-    tagID.toUpperCase();
-
-    if (tagID.substring(1) == "BD 31 15 2B" && BeepCurrentAmount > Total_Fair)
+    
+    content.toUpperCase();
+    if (content.substring(1) == "83 0A 9F FC" )  //change here the UID of the card/cards that you want to give access
     {
       BeepCurrentAmount -= Total_Fair;
-      char message[255];
-      sprintf(message, "Current Amount: %f \n Total Fair: %f", BeepCurrentAmount, Total_Fair);
-      lcd.print(message);
+      char amount[255];
+      sprintf(amount, " %f", (double)BeepCurrentAmount);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Current Amount:");
+      lcd.setCursor(0, 1);
+      lcd.print(amount);
       
       door.write(90); //Open
       delay(3000);
       door.write(10); //close
     }
-  }
-
-  // For adding load on the master card
-  if(current_time - CardLoaderPrevTime > LoaderTimeInterval)
-  {
-    CardLoaderPrevTime = current_time;
-    bool buttonState = digitalRead(BeepCardLoader_Button);
-    if(buttonState)
-      BeepCurrentAmount += 10;
-  }
 }
